@@ -1,13 +1,17 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    collections::HashSet,
+    hash::Hash,
+};
 use serde::{Serialize, de::DeserializeOwned};
 use arrayref::array_ref;
 use crate::error::Error;
 
 /// Imitates collection table per key
 ///
-pub(crate) struct SledEventTreeVec<T> {
+pub struct SledEventTreeVec<T> {
     tree: sled::Tree,
-    marker: Vec<PhantomData<T>>
+    marker: PhantomData<T>
 }
 
 impl<T> SledEventTreeVec<T> {
@@ -16,7 +20,7 @@ impl<T> SledEventTreeVec<T> {
     pub fn new(tree: sled::Tree) -> Self {
         Self {
             tree,
-            marker: vec!(PhantomData),
+            marker: PhantomData,
         }
     }
 }
@@ -102,7 +106,7 @@ where
 
 /// Direct singular key-value of T table
 ///
-pub(crate) struct SledEventTree<T> {
+pub struct SledEventTree<T> {
     tree: sled::Tree,
     marker: PhantomData<T>
 }
@@ -196,6 +200,57 @@ where
         }
     }
 }
+
+pub struct SledEventTreeMap<T> {
+    tree: sled::Tree,
+    marker: PhantomData<T>
+}
+
+impl<T> SledEventTreeMap<T> {
+    pub fn new(tree: sled::Tree) -> Self {
+        Self {
+            tree,
+            marker: PhantomData
+        }
+    }
+}
+
+impl<T> SledEventTreeMap<T>
+where
+    T: Serialize + DeserializeOwned + Eq + Hash {
+        pub fn get(&self, id: u64) -> Result<Option<HashSet<T>>, Error> {
+            match self.tree.get(key_bytes(id))? {
+                Some(val) => Ok(Some(serde_cbor::from_slice(&val)?)),
+                None => Ok(None),
+            }
+        }
+
+        pub fn replace_or_insert(&self, id: u64, new_set: HashSet<T>) -> Result<(), Error> {
+            self.tree.insert(key_bytes(id), serde_cbor::to_vec(&new_set)?)?;
+            Ok(())
+        }
+
+        pub fn add_or_skip(&self, key: u64, value: T) -> Result<(), Error> {
+            if let Ok(Some(mut events)) = self.get(key) {
+                events.insert(value);
+                self.replace_or_insert(key, events)
+            } else {
+                let mut events = HashSet::new();
+                events.insert(value);
+                self.replace_or_insert(key, events)?;
+                Ok(())
+            }
+        }
+
+        pub fn iter_values(&self, id: u64) -> Option<impl IntoIterator<Item = T>> {
+            if let Ok(Some(data)) = self.tree.get(key_bytes(id)) {
+                Some(
+                    serde_cbor::from_slice::<HashSet<T>>(&data)
+                        .unwrap()
+                )
+            } else { None }
+        }
+    }
 
 fn key_bytes(key: u64) -> [u8; 8] {
     key.to_be_bytes()
