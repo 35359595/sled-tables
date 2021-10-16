@@ -1,6 +1,6 @@
 [package]
 name = "sled-tables"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Ivan Temchenko <35359595i@gmail.com>"]
 edition = "2018"
 description = "Structurized, strongly typed tables for sled to store associated sets of data (Vec/HashSet)"

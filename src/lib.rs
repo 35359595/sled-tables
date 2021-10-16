@@ -1,5 +1,6 @@
 pub mod tables;
 pub mod error;
+pub use sled;
 
 #[cfg(test)]
 mod tests {
